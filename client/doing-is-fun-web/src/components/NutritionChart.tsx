@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { fetchNutritionHistory } from "../api/api";
+import { useGetNutritionHistoryQuery } from "../store/api";
+
 import {
     LineChart,
     Line,
@@ -11,30 +11,38 @@ import {
 } from "recharts";
 import { useAccessToken } from "../hooks/useAccessToken";
 
-type NutritionChart = {
-    entry_date: string;
-    total_consumed: number;
-    total_burned: number
-}
+// type NutritionChart = {
+//     entry_date: string;
+//     total_consumed: number;
+//     total_burned: number
+// }
 
 export default function NutritionChart() {
-    const [data, setData] = useState<NutritionChart[]>([]);
+    // const [data, setData] = useState<NutritionChart[]>([]);
     const [accessToken] = useAccessToken();
 
-    useEffect(() => {
-        async function loadData() {
-            if (!accessToken) return;
-            try {
-                const res = await fetchNutritionHistory(accessToken);
-                setData(res);
-            }
+    const { data = [], isLoading, error } = useGetNutritionHistoryQuery(
+        undefined,
+        { skip: !accessToken }
+    );
 
-            catch (err) {
-                console.error(err);
-            }
-        }
-        loadData();
-    }, [accessToken])
+    // useEffect(() => {
+    //     async function loadData() {
+    //         if (!accessToken) return;
+    //         try {
+    //             const res = await fetchNutritionHistory(accessToken);
+    //             setData(res);
+    //         }
+
+    //         catch (err) {
+    //             console.error(err);
+    //         }
+    //     }
+    //     loadData();
+    // }, [accessToken])
+
+    if (isLoading) return <p>Loading chart…</p>;
+    if (error) return <p className="text-red-400">Failed to load chart</p>;
 
     return (
         <div className="bg-[#1e1e1e] p-4 rounded text-white shadow-md">

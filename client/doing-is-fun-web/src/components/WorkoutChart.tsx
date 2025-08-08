@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { fetchWorkoutHistory } from "../api/api";
+import { useGetWorkoutHistoryQuery } from "../store/api";
 import {
     LineChart,
     Line,
@@ -11,28 +10,16 @@ import {
 } from "recharts";
 import { useAccessToken } from "../hooks/useAccessToken";
 
-type WorkoutChart = {
-    entry_date: string;
-    total_duration: number
-}
-
 export default function WorkoutChart() {
-    const [data, setData] = useState<WorkoutChart[]>([]);
     const [accessToken] = useAccessToken();
 
-    useEffect(() => {
-        async function loadData() {
-            if (!accessToken) return;
-            try {
-                const res = await fetchWorkoutHistory(accessToken);
-                setData(res);
-            }
-            catch (err) {
-                console.error(err);
-            }
-        }
-        loadData();
-    }, [accessToken])
+    const { data = [], isLoading, error } = useGetWorkoutHistoryQuery(
+        undefined,
+        { skip: !accessToken }
+    );
+
+    if (isLoading) return <p>Loading chart…</p>;
+    if (error) return <p className="text-red-400">Failed to load chart</p>;
 
     return (
         <div className="bg-[#1e1e1e] p-4 rounded text-white shadow-md">

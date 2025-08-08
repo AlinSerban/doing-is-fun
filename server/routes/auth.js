@@ -4,8 +4,11 @@ import jwt from "jsonwebtoken";
 import { pool } from "../db/db.js";
 import { registerSchema, loginSchema } from "../validation/authValidation.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
+import { v4 as uuidv4 } from "uuid";
+import cookieParser from "cookie-parser";
 
 const router = express.Router();
+router.use(cookieParser());
 
 router.post("/register", async (req, res) => {
   const { error, value } = registerSchema.validate(req.body);
@@ -28,15 +31,29 @@ router.post("/register", async (req, res) => {
     );
 
     const user = result.rows[0];
-    const token = jwt.sign({ id: user.id }, process.env.TOKEN_SECRET, {
-      expiresIn: "1h",
+    const { accessToken, refreshToken, jti } = generateTokens(user.id);
+    // const token = jwt.sign({ id: user.id }, process.env.TOKEN_SECRET, {
+    //   expiresIn: "1h",
+    // });
+
+    await pool.query(
+      "INSERT INTO refresh_tokens(token_id, user_id) VALUES($1,$2)",
+      [jti, user.id]
+    );
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "Strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
-    res.json({ user, token });
+
+    res.json({ user, accessToken });
   } catch (err) {
     console.error("Register failed: " + err);
-    if (err.message.includes("secretOrPrivateKey")) {
-      await pool.query("DELETE FROM users WHERE email = $1", [email]);
-    }
+    // if (err.message.includes("secretOrPrivateKey")) {
+    //   await pool.query("DELETE FROM users WHERE email = $1", [email]);
+    // }
     res.status(500).json({ error: "Server error during registration" });
   }
 });
@@ -59,48 +76,100 @@ router.post("/login", async (req, res) => {
   // const token = jwt.sign({ id: user.id }, process.env.TOKEN_SECRET, {
   //   expiresIn: "1h",
   // });
-  const { accessToken, refreshToken } = generateTokens(user.id);
+  const { accessToken, refreshToken, jti } = generateTokens(user.id);
+
+  await pool.query(
+    "INSERT INTO refresh_tokens(token_id, user_id) VALUES($1,$2)",
+    [jti, user.id]
+  );
+
+  // res.cookie("refreshToken", refreshToken, {
+  //   httpOnly: true,
+  //   secure: true,
+  //   sameSite: "Strict",
+  //   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  // });
 
   res.cookie("refreshToken", refreshToken, {
     httpOnly: true,
-    secure: true,
+    secure: process.env.NODE_ENV === "production",
     sameSite: "Strict",
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    path: "/api/auth",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 
   delete user.password;
   res.json({ user, accessToken });
 });
 
-router.post("/refresh", (req, res) => {
+router.post("/refresh", async (req, res) => {
   const token = req.cookies.refreshToken;
   if (!token) return res.status(401).json({ error: "No refresh token" });
 
   try {
     const payload = jwt.verify(token, process.env.REFRESH_SECRET);
-    const newAccessToken = jwt.sign(
-      { id: payload.id },
-      process.env.TOKEN_SECRET,
-      { expiresIn: "15m" }
+    const { jti, id: userId } = payload;
+    const stored = await pool.query(
+      "SELECT 1 FROM refresh_tokens WHERE token_id=$1 AND user_id=$2",
+      [jti, userId]
     );
-    res.json({ accessToken: newAccessToken });
+
+    if (!stored.rowCount) {
+      return res.status(403).json({ error: "Refresh token revoked" });
+    }
+
+    await pool.query("DELETE FROM refresh_tokens WHERE token_id=$1", [jti]);
+
+    const {
+      accessToken,
+      refreshToken: newRefresh,
+      jti: newJti,
+    } = generateTokens(userId);
+
+    await pool.query(
+      "INSERT INTO refresh_tokens(token_id, user_id) VALUES($1,$2)",
+      [newJti, userId]
+    );
+
+    // res.cookie("refreshToken", newRefresh, {
+    //   httpOnly: true,
+    //   secure: true,
+    //   sameSite: "Strict",
+    //   maxAge: 7 * 24 * 60 * 60 * 1000,
+    // });
+
+    res.cookie("refreshToken", newRefresh, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "Strict",
+      path: "/api/auth",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.json({ accessToken });
   } catch (err) {
+    console.error("Refresh failed:", err);
     return res.status(401).json({ error: "Invalid refresh token" });
   }
 });
 
-router.post("/logout", (req, res) => {
+router.post("/logout", authMiddleware, async (req, res) => {
+  await pool.query("DELETE FROM refresh_tokens WHERE user_id=$1", [
+    req.user.id,
+  ]);
+
   res.clearCookie("refreshToken", {
     httpOnly: true,
-    secure: true,
+    secure: process.env.NODE_ENV === "production",
     sameSite: "Strict",
+    path: "/api/auth",
   });
   return res.json({ message: "Logged out successfully" });
 });
 
 router.get("/me", authMiddleware, async (req, res) => {
   const result = await pool.query(
-    "SELECT id, full_name, email, username FROM users WHERE id = $1",
+    "SELECT id, full_name, email, username, xp FROM users WHERE id = $1",
     [req.user.id]
   );
   if (!result.rowCount)
@@ -113,10 +182,15 @@ function generateTokens(userId) {
   const accessToken = jwt.sign({ id: userId }, process.env.TOKEN_SECRET, {
     expiresIn: "15m",
   });
-  const refreshToken = jwt.sign({ id: userId }, process.env.REFRESH_SECRET, {
-    expiresIn: "7d",
-  });
-  return { accessToken, refreshToken };
+  const jti = uuidv4();
+  const refreshToken = jwt.sign(
+    { id: userId, jti },
+    process.env.REFRESH_SECRET,
+    {
+      expiresIn: "7d",
+    }
+  );
+  return { accessToken, refreshToken, jti };
 }
 
 export default router;

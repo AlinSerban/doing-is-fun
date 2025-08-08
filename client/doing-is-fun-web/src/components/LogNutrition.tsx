@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { postNutrition } from "../api/api";
 import { useAccessToken } from "../hooks/useAccessToken";
+import { useAddNutritionMutation } from "../store/api";
 
 export default function LogNutrition() {
     const [consumed, setConsumed] = useState(0);
     const [burned, setBurned] = useState(0);
     const [message, setMessage] = useState("");
     const [accessToken] = useAccessToken();
+
+    const [addNutrition, { isLoading }] = useAddNutritionMutation();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -15,9 +17,12 @@ export default function LogNutrition() {
             setMessage("You must be logged in.");
             return;
         }
-
         try {
-            const response = await postNutrition(consumed, burned, accessToken);
+            const response = await addNutrition({
+                calories_burned: burned,
+                calories_consumed: consumed,
+                entry_date: new Date().toISOString().split("T")[0]
+            }).unwrap();
             setMessage(response.message || "Nutrition logged!");
             setConsumed(0);
             setBurned(0);
@@ -48,7 +53,7 @@ export default function LogNutrition() {
             />
 
             <button type="submit" className="bg-blue-600 px-6 py-2 rounded">
-                Save
+                {isLoading ? "Saving…" : "Save"}
             </button>
 
             {message && <p className="mt-2">{message}</p>}

@@ -7,14 +7,20 @@ import Navbar from './components/Navbar';
 import Dashboard from "./pages/Dashboard";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Profile from "./pages/Profile";
+import { LevelUpModal } from "./components/ui/LevelUpModal";
+import XpBar from "./components/XpBar";
+import { BadgeModal } from "./components/ui/BadgeModal";
 
 function App() {
   const [showRegister, setShowRegister] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   return (
     <>
+      <LevelUpModal />
+      <BadgeModal />
       <Router>
         <Navbar onRegisterClick={() => setShowRegister(true)} onLoginClick={() => setShowLogin(true)} />
+        <XpBar />
         <Register showModal={showRegister} setShowModal={setShowRegister} />
         <Login showModal={showLogin} setShowModal={setShowLogin} />
         <Routes>

@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { fetchActivityHistory } from "../api/api";
+// import { useEffect, useState } from "react";
+// import { fetchActivityHistory } from "../api/api";
+import { useGetActivityHistoryQuery } from "../store/api";
 import {
     LineChart,
     Line,
@@ -11,28 +12,36 @@ import {
 } from "recharts";
 import { useAccessToken } from "../hooks/useAccessToken";
 
-type ActivityChartData = {
-    entry_date: string;
-    total_duration: number;
-};
+// type ActivityChartData = {
+//     entry_date: string;
+//     total_duration: number;
+// };
 
 export default function ActivityChart() {
-    const [data, setData] = useState<ActivityChartData[]>([]);
+    // const [data, setData] = useState<ActivityChartData[]>([]);
     const [accessToken] = useAccessToken();
 
-    useEffect(() => {
-        async function loadData() {
-            if (!accessToken) return;
-            try {
-                const res = await fetchActivityHistory(accessToken);
-                setData(res);
-            }
-            catch (err) {
-                console.error(err);
-            }
-        }
-        loadData();
-    }, [accessToken])
+    const { data = [], isLoading, error } = useGetActivityHistoryQuery(
+        undefined,
+        { skip: !accessToken }
+    );
+
+    // useEffect(() => {
+    //     async function loadData() {
+    //         if (!accessToken) return;
+    //         try {
+    //             const res = await fetchActivityHistory(accessToken);
+    //             setData(res);
+    //         }
+    //         catch (err) {
+    //             console.error(err);
+    //         }
+    //     }
+    //     loadData();
+    // }, [accessToken])
+
+    if (isLoading) return <p>Loading chart…</p>;
+    if (error) return <p className="text-red-400">Failed to load chart</p>;
 
     return (
         <div className="bg-[#1e1e1e] p-4 rounded text-white shadow-md">

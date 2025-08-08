@@ -1,6 +1,10 @@
 import { useState } from "react";
-import { postWorkout } from "../api/api";
 import { useAccessToken } from "../hooks/useAccessToken";
+import { useAddWorkoutMutation } from "../store/api";
+
+// interface LogWorkoutProps {
+//     onAdd?: () => void;
+// }
 
 export default function LogWorkout() {
     const [type, setType] = useState("");
@@ -8,6 +12,7 @@ export default function LogWorkout() {
     const [message, setMessage] = useState("");
     const [accessToken] = useAccessToken();
 
+    const [addWorkout, { isLoading }] = useAddWorkoutMutation();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -18,8 +23,16 @@ export default function LogWorkout() {
         }
 
         try {
-            const response = await postWorkout(type, duration, accessToken);
-            setMessage(response.message || "Workout logged!");
+            // const response = await postWorkout(type, duration, accessToken);
+            // console.log('[LogWorkout] postWorkout succeeded, about to call onAdd');
+            // onAdd?.();
+            // console.log('[LogWorkout] onAdd callback has run');
+            await addWorkout({
+                workout_type: type,
+                duration,
+                entry_date: new Date().toISOString().split("T")[0],
+            }).unwrap();
+            setMessage("Workout logged!");
             setType("");
             setDuration(0);
         }
@@ -51,7 +64,7 @@ export default function LogWorkout() {
             />
 
             <button type="submit" className="bg-blue-600 px-6 py-2 rounded">
-                Save
+                {isLoading ? "Saving…" : "Save"}
             </button>
 
             {message && <p className="mt-2">{message}</p>}

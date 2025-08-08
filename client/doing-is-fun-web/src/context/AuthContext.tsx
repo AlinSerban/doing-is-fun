@@ -1,11 +1,11 @@
 import { createContext, } from "react";
 import { type User } from "../types/auth";
 
-type AuthContextType = {
+export type AuthContextType = {
     user: User | null;
-    setUser: (user: User | null) => void;
+    //setUser: (user: User | null) => void;
     accessToken: string | null;
-    setAccessToken: (token: string | null) => void;
+    //setAccessToken: (token: string | null) => void;
     loading: boolean;
 };
 
